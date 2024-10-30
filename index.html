@@ -1,0 +1,127 @@
+<html>
+<head>
+  <style>
+    #outgoing {
+      width: 600px;
+      word-wrap: break-word;
+      white-space: normal;
+    }
+
+    #userList {
+      margin-top: 10px;
+    }
+
+    video {
+      width: 400px;
+      height: 300px;
+      margin: 10px 0;
+      border: 1px solid #000;
+    }
+  </style>
+</head>
+
+<body>
+<h3>Your UserID: <span id="userIdDisplay">Loading...</span></h3>
+<h3>Active Users</h3>
+<div id="userList"></div>
+
+<div>
+  <h4>Local Video (You)</h4>
+  <video id="localVideo" autoplay muted></video>  <!-- Local stream -->
+</div>
+
+<div>
+  <h4>Remote Video (Peer)</h4>
+  <video id="remoteVideo" autoplay></video>  <!-- Remote stream -->
+</div>
+
+<script src="js/simplepeer.min.js"></script>
+<script>
+  let userID;
+  let peer;
+  let localStream;
+  let callerId = null;  // Store the caller's ID when receiving an offer
+
+  const ws = new WebSocket("wss://spring-websocket-demo.onrender.com/socket");
+
+  ws.onopen = () => console.log("WebSocket connected");
+
+  ws.onmessage = (event) => {
+    const message = JSON.parse(event.data);
+
+    if (message.messages?.userId) {
+      userID = message.messages.userId;
+      document.getElementById("userIdDisplay").textContent = userID;
+    }
+
+    if (message.messages?.users) {
+      updateActiveUsers(JSON.parse(message.messages.users));
+    }
+
+    if (message.senderId && message.content) {
+      handleSDPMessage(message.senderId, JSON.parse(message.content));
+    }
+  };
+
+  navigator.mediaDevices.getUserMedia({video: true, audio: false})
+    .then((stream) => {
+      localStream = stream;
+      document.getElementById("localVideo").srcObject = stream;  // Assign to local video
+    })
+    .catch(err => console.error("Stream error:", err));
+
+  function createPeer(initiator, targetUserID = null) {
+    peer = new SimplePeer({
+      initiator,
+      stream: localStream,
+      trickle: false,
+      config: {
+        iceServers: [
+          {urls: "stun:stun.l.google.com:19302"},
+          {urls: "stun:stun1.l.google.com:19302"}
+        ],
+      },
+    });
+
+    peer.on("signal", (data) => {
+      const message = {
+        recipientId: targetUserID || callerId,  // Use stored callerId for answers
+        content: JSON.stringify(data),
+      };
+      ws.send(JSON.stringify(message));
+    });
+
+    peer.on("stream", (remoteStream) => {
+      console.log("Remote stream received");
+      const remoteVideo = document.getElementById("remoteVideo");
+      remoteVideo.srcObject = remoteStream;  // Assign to remote video element
+      remoteVideo.play();
+    });
+
+    peer.on("error", (err) => console.error("Peer error:", err));
+  }
+
+  function handleSDPMessage(senderId, sdp) {
+    if (sdp.type === "offer") {
+      callerId = senderId;  // Store the caller's ID
+      createPeer(false); // Create peer as the receiver
+    }
+    peer.signal(sdp);
+  }
+
+  function updateActiveUsers(users) {
+    const userList = document.getElementById("userList");
+    userList.innerHTML = "";
+
+    users.forEach((id) => {
+      if (id !== userID) {
+        const button = document.createElement("button");
+        button.textContent = `Call ${id}`;
+        button.onclick = () => createPeer(true, id); // Initiate call
+        userList.appendChild(button);
+      }
+    });
+  }
+</script>
+</body>
+</html>
