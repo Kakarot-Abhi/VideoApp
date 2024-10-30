@@ -63,12 +63,13 @@
     }
   };
 
-  navigator.mediaDevices.getUserMedia({video: true, audio: false})
-    .then((stream) => {
-      localStream = stream;
-      document.getElementById("localVideo").srcObject = stream;  // Assign to local video
-    })
-    .catch(err => console.error("Stream error:", err));
+  // Get the local video stream
+  navigator.mediaDevices.getUserMedia({ video: true, audio: false })
+          .then((stream) => {
+            localStream = stream;
+            document.getElementById("localVideo").srcObject = stream;  // Assign to local video
+          })
+          .catch(err => console.error("Stream error:", err));
 
   function createPeer(initiator, targetUserID = null) {
     peer = new SimplePeer({
@@ -77,9 +78,20 @@
       trickle: false,
       config: {
         iceServers: [
-          {urls: "stun:stun.l.google.com:19302"},
-          {urls: "stun:stun1.l.google.com:19302"}
+          { urls: "stun:stun.l.google.com:19302" },
+          { urls: "stun:stun1.l.google.com:19302" },
+          {
+            urls: "turn:relay.metered.ca:80",  // Public TURN server
+            username: "public",
+            credential: "public"
+          },
+          {
+            urls: "turn:relay.metered.ca:443",  // TURN over TLS
+            username: "public",
+            credential: "public"
+          }
         ],
+        iceTransportPolicy: "all",
       },
     });
 
@@ -99,6 +111,9 @@
     });
 
     peer.on("error", (err) => console.error("Peer error:", err));
+
+    peer.on("iceStateChange", (state) => console.log("ICE state:", state));
+    peer.on("iceCandidate", (candidate) => console.log("ICE candidate:", candidate));
   }
 
   function handleSDPMessage(senderId, sdp) {
