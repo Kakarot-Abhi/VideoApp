@@ -71,40 +71,50 @@
           })
           .catch(err => console.error("Stream error:", err));
 
-          function createPeer(initiator, targetUserID = null) {
-  peer = new SimplePeer({
-    initiator,
-    stream: localStream,
-    trickle: false,
-    config: {
-      iceServers: [
-        { urls: "stun:stun.l.google.com:19302" },
-        { urls: "stun:stun1.l.google.com:19302" },
-        {
-          urls: "turn:relay.metered.ca:443", // Use TURN over TLS
-          username: "public",
-          credential: "public"
-        }
-      ],
-      iceTransportPolicy: "relay", // Force traffic through TURN for cross-network
-    },
-  });
+  function createPeer(initiator, targetUserID = null) {
+    peer = new SimplePeer({
+      initiator,
+      stream: localStream,
+      trickle: false,
+      config: {
+        iceServers: [
+          { urls: "stun:stun.l.google.com:19302" },
+          { urls: "stun:stun1.l.google.com:19302" },
+          {
+            urls: "turn:relay.metered.ca:80",  // Public TURN server
+            username: "public",
+            credential: "public"
+          },
+          {
+            urls: "turn:relay.metered.ca:443",  // TURN over TLS
+            username: "public",
+            credential: "public"
+          }
+        ],
+        iceTransportPolicy: "all",
+      },
+    });
 
-  peer.on("signal", (data) => {
-    const message = {
-      recipientId: targetUserID || callerId,
-      content: JSON.stringify(data),
-    };
-    ws.send(JSON.stringify(message));
-  });
+    peer.on("signal", (data) => {
+      const message = {
+        recipientId: targetUserID || callerId,  // Use stored callerId for answers
+        content: JSON.stringify(data),
+      };
+      ws.send(JSON.stringify(message));
+    });
 
-  peer.on("stream", (remoteStream) => {
-    document.getElementById("remoteVideo").srcObject = remoteStream;
-    remoteVideo.play();
-  });
+    peer.on("stream", (remoteStream) => {
+      console.log("Remote stream received");
+      const remoteVideo = document.getElementById("remoteVideo");
+      remoteVideo.srcObject = remoteStream;  // Assign to remote video element
+      remoteVideo.play();
+    });
 
-  peer.on("error", (err) => console.error("Peer error:", err));
-}
+    peer.on("error", (err) => console.error("Peer error:", err));
+
+    peer.on("iceStateChange", (state) => console.log("ICE state:", state));
+    peer.on("iceCandidate", (candidate) => console.log("ICE candidate:", candidate));
+  }
 
   function handleSDPMessage(senderId, sdp) {
     if (sdp.type === "offer") {
