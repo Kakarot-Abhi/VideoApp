@@ -41,7 +41,6 @@
   let peer;
   let localStream;
   let callerId = null;  // Store the caller's ID when receiving an offer
-
   const ws = new WebSocket("wss://spring-websocket-demo.onrender.com/socket");
 
   ws.onopen = () => console.log("WebSocket connected");
@@ -67,7 +66,7 @@
   navigator.mediaDevices.getUserMedia({ video: true, audio: false })
           .then((stream) => {
             localStream = stream;
-            document.getElementById("localVideo").srcObject = stream;  // Assign to local video
+            document.getElementById("localVideo").srcObject = stream;
           })
           .catch(err => console.error("Stream error:", err));
 
@@ -81,14 +80,9 @@
           { urls: "stun:stun.l.google.com:19302" },
           { urls: "stun:stun1.l.google.com:19302" },
           {
-            urls: "turn:relay.metered.ca:80",  // Public TURN server
-            username: "public",
-            credential: "public"
-          },
-          {
-            urls: "turn:relay.metered.ca:443",  // TURN over TLS
-            username: "public",
-            credential: "public"
+            urls: "turn:your-turn-server-url",
+            username: "your-username",
+            credential: "your-password"
           }
         ],
         iceTransportPolicy: "all",
@@ -97,29 +91,29 @@
 
     peer.on("signal", (data) => {
       const message = {
-        recipientId: targetUserID || callerId,  // Use stored callerId for answers
+        recipientId: targetUserID || callerId,
         content: JSON.stringify(data),
       };
       ws.send(JSON.stringify(message));
     });
 
     peer.on("stream", (remoteStream) => {
-      console.log("Remote stream received");
       const remoteVideo = document.getElementById("remoteVideo");
-      remoteVideo.srcObject = remoteStream;  // Assign to remote video element
+      remoteVideo.srcObject = remoteStream;
       remoteVideo.play();
     });
 
     peer.on("error", (err) => console.error("Peer error:", err));
 
     peer.on("iceStateChange", (state) => console.log("ICE state:", state));
-    peer.on("iceCandidate", (candidate) => console.log("ICE candidate:", candidate));
   }
 
   function handleSDPMessage(senderId, sdp) {
     if (sdp.type === "offer") {
-      callerId = senderId;  // Store the caller's ID
-      createPeer(false); // Create peer as the receiver
+      callerId = senderId;
+      if (!peer || peer.destroyed) {
+        createPeer(false);  // If peer is destroyed, create a new one
+      }
     }
     peer.signal(sdp);
   }
@@ -132,7 +126,12 @@
       if (id !== userID) {
         const button = document.createElement("button");
         button.textContent = `Call ${id}`;
-        button.onclick = () => createPeer(true, id); // Initiate call
+        button.onclick = () => {
+          if (peer && !peer.destroyed) {
+            peer.destroy();
+          }
+          createPeer(true, id); // Initiate call
+        };
         userList.appendChild(button);
       }
     });
